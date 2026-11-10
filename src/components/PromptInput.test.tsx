@@ -54,6 +54,29 @@ describe('PromptInput', () => {
     expect(screen.getByRole('button', { name: '컴포넌트 생성' })).toBeEnabled();
   });
 
+  it('history가 있으면 최근 프롬프트 목록을 보여준다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={['카드 만들기', '표 만들기']} />);
+
+    expect(screen.getByText('최근 프롬프트')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '카드 만들기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '표 만들기' })).toBeInTheDocument();
+  });
+
+  it('history가 비어 있으면 최근 프롬프트 영역을 보여주지 않는다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={[]} />);
+
+    expect(screen.queryByText('최근 프롬프트')).not.toBeInTheDocument();
+  });
+
+  it('최근 프롬프트를 클릭하면 입력창에 채워진다', async () => {
+    const user = userEvent.setup();
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={['카드 만들기']} />);
+
+    await user.click(screen.getByRole('button', { name: '카드 만들기' }));
+
+    expect(screen.getByRole('textbox')).toHaveValue('카드 만들기');
+  });
+
   it('500자 초과 상태에서 Ctrl+Enter를 눌러도 onGenerate가 호출되지 않는다', () => {
     const onGenerate = vi.fn();
     render(<PromptInput onGenerate={onGenerate} isLoading={false} />);
