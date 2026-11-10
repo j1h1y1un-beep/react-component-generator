@@ -1,7 +1,8 @@
 import { stripCodeFences, ensureRenderCall } from './generator';
 import { withModelFallback } from './fallback';
 import { buildGoogleGenerationConfig } from './googleConfig';
-import { createSseParser, extractAnthropicDelta, extractGoogleDelta } from './stream';
+import { extractAnthropicDelta, extractGoogleDelta } from './stream';
+import { createClientStream } from './clientStream';
 
 // 우선순위 순서. 앞 모델이 실패하면 다음 모델로 폴백한다.
 const GOOGLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
@@ -68,9 +69,14 @@ function resolveApiKey(provider: Provider, clientKey?: string): string | null {
 }
 
 // 제공자 스트리밍 응답을 연다. 스트림 시작 전 실패(인증·과부하 등)는 여기서 던져 상태코드로 매핑한다.
-async function openAnthropicStream(prompt: string, apiKey: string): Promise<Response> {
+async function openAnthropicStream(
+  prompt: string,
+  apiKey: string,
+  signal: AbortSignal,
+): Promise<Response> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
@@ -91,11 +97,17 @@ async function openAnthropicStream(prompt: string, apiKey: string): Promise<Resp
   return response;
 }
 
-async function openGoogleStream(prompt: string, apiKey: string, model: string): Promise<Response> {
+async function openGoogleStream(
+  prompt: string,
+  apiKey: string,
+  model: string,
+  signal: AbortSignal,
+): Promise<Response> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -110,8 +122,10 @@ async function openGoogleStream(prompt: string, apiKey: string, model: string): 
   return response;
 }
 
-async function openGoogle(prompt: string, apiKey: string): Promise<Response> {
-  return withModelFallback(GOOGLE_MODELS, (model) => openGoogleStream(prompt, apiKey, model));
+async function openGoogle(prompt: string, apiKey: string, signal: AbortSignal): Promise<Response> {
+  return withModelFallback(GOOGLE_MODELS, (model) =>
+    openGoogleStream(prompt, apiKey, model, signal),
+  );
 }
 
 function mapError(err: unknown): { status: number; error: string } {
@@ -124,55 +138,6 @@ function mapError(err: unknown): { status: number; error: string } {
     return { status: 429, error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' };
   }
   return { status: 500, error: message };
-}
-
-// 제공자 SSE 스트림을 클라이언트용 NDJSON 이벤트(delta/done/error)로 변환한다.
-function toClientStream(upstream: Response, provider: Provider): ReadableStream<Uint8Array> {
-  const extractDelta = provider === 'google' ? extractGoogleDelta : extractAnthropicDelta;
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const parse = createSseParser();
-
-  return new ReadableStream({
-    async start(controller) {
-      // 클라이언트가 연결을 끊으면 enqueue/close가 던지므로 무시한다.
-      const send = (event: object) => {
-        try {
-          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-        } catch {
-          /* 이미 닫힌 스트림 */
-        }
-      };
-      let full = '';
-
-      const handleSse = (text: string) => {
-        for (const data of parse(text)) {
-          const delta = extractDelta(data);
-          if (delta) {
-            full += delta;
-            send({ type: 'delta', text: delta });
-          }
-        }
-      };
-
-      try {
-        for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
-          handleSse(decoder.decode(chunk, { stream: true }));
-        }
-        // 마지막 이벤트가 빈 줄 없이 끝나도 처리되도록 잔여 버퍼를 비운다.
-        handleSse(`${decoder.decode()}\n\n`);
-        send({ type: 'done', code: ensureRenderCall(stripCodeFences(full)) });
-      } catch (err) {
-        send({ type: 'error', error: mapError(err).error });
-      } finally {
-        try {
-          controller.close();
-        } catch {
-          /* 이미 닫힌 스트림 */
-        }
-      }
-    },
-  });
 }
 
 const server = Bun.serve({
@@ -220,12 +185,22 @@ const server = Bun.serve({
           );
         }
 
+        // 클라이언트가 연결을 끊으면 업스트림 요청도 중단해 제공자 과금을 멈춘다.
+        const abort = new AbortController();
         const upstream =
           provider === 'google'
-            ? await openGoogle(prompt, resolvedKey)
-            : await openAnthropicStream(prompt, resolvedKey);
+            ? await openGoogle(prompt, resolvedKey, abort.signal)
+            : await openAnthropicStream(prompt, resolvedKey, abort.signal);
 
-        return new Response(toClientStream(upstream, provider), {
+        const stream = createClientStream({
+          source: upstream.body as unknown as AsyncIterable<Uint8Array>,
+          extractDelta: provider === 'google' ? extractGoogleDelta : extractAnthropicDelta,
+          finalize: (full) => ensureRenderCall(stripCodeFences(full)),
+          formatError: (err) => mapError(err).error,
+          onCancel: () => abort.abort(),
+        });
+
+        return new Response(stream, {
           headers: {
             ...CORS_HEADERS,
             'Content-Type': 'application/x-ndjson; charset=utf-8',

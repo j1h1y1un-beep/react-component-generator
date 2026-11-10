@@ -62,6 +62,12 @@ describe('readGenerateStream', () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it('done의 코드가 비어 있으면 빈 컴포넌트 대신 예외를 던진다', async () => {
+    await expect(
+      readGenerateStream(streamOf(line({ type: 'done', code: '' })), () => {}),
+    ).rejects.toThrow('비어');
+  });
+
   it('done 없이 스트림이 끝나면 예외를 던진다', async () => {
     await expect(
       readGenerateStream(streamOf(line({ type: 'delta', text: 'x' })), () => {}),

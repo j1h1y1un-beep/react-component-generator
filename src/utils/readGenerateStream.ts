@@ -23,6 +23,9 @@ export async function readGenerateStream(
       partial += event.text;
       onProgress(partial);
     } else if (event.type === 'done') {
+      if (!event.code.trim()) {
+        throw new Error('생성된 코드가 비어 있습니다. 다시 시도해주세요.');
+      }
       finalCode = event.code;
     } else if (event.type === 'error') {
       throw new Error(event.error);
