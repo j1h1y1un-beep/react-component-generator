@@ -26,7 +26,8 @@ bun run dev
 브라우저에서 `http://localhost:5173` 접속 후 사용할 수 있습니다.
 
 - `.env`에 API 키를 설정하면 UI에서 별도 입력 없이 바로 사용 가능
-- `.env` 없이도 UI에서 직접 API 키를 입력하여 사용 가능
+- `.env` 없이도 UI에서 직접 API 키를 입력하여 사용 가능 (입력한 키는 브라우저 localStorage에 저장되어 새로고침 후에도 유지됨)
+- Provider, 프롬프트 히스토리(최대 50개), 생성된 컴포넌트 목록도 localStorage에 저장됨
 
 ## 주요 기능
 

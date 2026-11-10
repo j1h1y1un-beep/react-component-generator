@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { PromptInput } from './components/PromptInput';
 import { ComponentCard } from './components/ComponentCard';
 import { useComponentGenerator } from './hooks/useComponentGenerator';
+import { usePersistentState } from './hooks/usePersistentState';
 import type { Provider } from './types';
 import './App.css';
 
@@ -10,15 +11,21 @@ const PROVIDER_CONFIG = {
   google: { label: 'Google', placeholder: 'AIza...' },
 } as const;
 
+const isString = (value: unknown): value is string => typeof value === 'string';
+const isProvider = (value: unknown): value is Provider =>
+  typeof value === 'string' && value in PROVIDER_CONFIG;
+
 function App() {
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = usePersistentState('rcg:apiKey', '', { validate: isString });
   const [showKey, setShowKey] = useState(false);
-  const [provider, setProvider] = useState<Provider>('google');
+  const [provider, setProvider] = usePersistentState<Provider>('rcg:provider', 'google', {
+    validate: isProvider,
+  });
   const [envKeys, setEnvKeys] = useState<Record<Provider, boolean>>({
     anthropic: false,
     google: false,
   });
-  const { components, isLoading, error, generate, removeComponent, clearAll } =
+  const { components, promptHistory, isLoading, error, generate, removeComponent, clearAll } =
     useComponentGenerator();
 
   useEffect(() => {
@@ -69,7 +76,7 @@ function App() {
             <span className="titlebar-title">프롬프트</span>
           </div>
           <div className="window-body">
-            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} />
+            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} history={promptHistory} />
           </div>
         </section>
 
