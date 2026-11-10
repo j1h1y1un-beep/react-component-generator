@@ -306,6 +306,25 @@ button:focus-visible {
   color: var(--face-shade);
 }
 
+.prompt-form .btn-generate {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.prompt-counter {
+  grid-column: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--face-shade);
+}
+
+.prompt-counter-over {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .btn-generate {
   height: 52px;
   padding: 0 22px;
@@ -663,8 +682,11 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .btn-generate {
+  .btn-generate,
+  .prompt-form .btn-generate {
     width: 100%;
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .card-header,
