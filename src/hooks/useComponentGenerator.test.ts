@@ -1,11 +1,24 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useComponentGenerator } from './useComponentGenerator';
+
+function ndjsonBody(...events: object[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(events.map((e) => `${JSON.stringify(e)}\n`).join('')));
+      controller.close();
+    },
+  });
+}
 
 function mockFetchOk(code = 'render(<div />)') {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ code }) }),
+    vi.fn().mockImplementation(async () => ({
+      ok: true,
+      body: ndjsonBody({ type: 'delta', text: code }, { type: 'done', code }),
+    })),
   );
 }
 
@@ -108,5 +121,55 @@ describe('useComponentGenerator 프롬프트 히스토리', () => {
 
     const second = renderHook(() => useComponentGenerator());
     expect(second.result.current.promptHistory).toEqual(['유지될 프롬프트']);
+  });
+});
+
+describe('useComponentGenerator 스트리밍', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('생성 중에는 수신한 코드가 streamingCode로 노출된다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(encoder.encode('{"type":"delta","text":"const A"}\n'));
+        await gate;
+        controller.enqueue(encoder.encode('{"type":"done","code":"const A"}\n'));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body }));
+
+    const { result } = renderHook(() => useComponentGenerator());
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.generate('카드', undefined, 'google');
+    });
+    await waitFor(() => expect(result.current.streamingCode).toBe('const A'));
+
+    release();
+    await act(() => pending);
+    expect(result.current.streamingCode).toBeNull();
+    expect(result.current.components[0].code).toBe('const A');
+  });
+
+  it('스트림 중 error 이벤트가 오면 error를 설정하고 컴포넌트를 추가하지 않는다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: ndjsonBody({ type: 'delta', text: 'x' }, { type: 'error', error: '과부하' }),
+      }),
+    );
+    const { result } = renderHook(() => useComponentGenerator());
+    await act(() => result.current.generate('카드', undefined, 'google'));
+
+    expect(result.current.error).toBe('과부하');
+    expect(result.current.components).toEqual([]);
+    expect(result.current.streamingCode).toBeNull();
   });
 });
