@@ -1,5 +1,73 @@
 {
   "worktree": {
     "baseRef": "head"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Edit(src/**)",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"[TDD 상기] .claude/rules/tdd.md는 Rigid 규칙이다. 로직/API/유틸/버그 수정은 (1) RED: 실패하는 테스트를 먼저 작성하고 반드시 실행해 실패 이유가 기능 미구현임을 확인 (2) GREEN: 테스트를 통과시키는 최소 구현만 작성(YAGNI) 후 전체 테스트 실행 (3) REFACTOR: 새 동작 없이 정리 후 green 유지. 테스트보다 프로덕션 코드를 먼저 썼다면 그 코드를 삭제하고 RED부터 다시 시작한다. 나중에 테스트 추가, 너무 단순해서 생략, 시간 없음은 변명이다. 지금 수정하려는 파일이 TDD 대상인지 먼저 판단하고, 대상이면 이 편집 전에 RED를 완료했는지 확인하라.\"}}'"
+          },
+          {
+            "type": "command",
+            "if": "Edit(server/**)",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"[TDD 상기] .claude/rules/tdd.md는 Rigid 규칙이다. 로직/API/유틸/버그 수정은 (1) RED: 실패하는 테스트를 먼저 작성하고 반드시 실행해 실패 이유가 기능 미구현임을 확인 (2) GREEN: 테스트를 통과시키는 최소 구현만 작성(YAGNI) 후 전체 테스트 실행 (3) REFACTOR: 새 동작 없이 정리 후 green 유지. 테스트보다 프로덕션 코드를 먼저 썼다면 그 코드를 삭제하고 RED부터 다시 시작한다. 나중에 테스트 추가, 너무 단순해서 생략, 시간 없음은 변명이다. 지금 수정하려는 파일이 TDD 대상인지 먼저 판단하고, 대상이면 이 편집 전에 RED를 완료했는지 확인하라.\"}}'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "bun run test >&2 || { echo 'bun run test 실패: 테스트가 통과해야 커밋할 수 있습니다.' >&2; exit 2; }",
+            "timeout": 180,
+            "statusMessage": "커밋 전 테스트 실행 중..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*credential*)",
+      "Read(**/*secret*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/.npmrc)",
+      "Read(**/.netrc)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/*credential*)",
+      "Edit(**/*secret*)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.p12)",
+      "Edit(**/*.pfx)",
+      "Edit(**/id_rsa*)",
+      "Edit(**/id_ed25519*)",
+      "Edit(**/.npmrc)",
+      "Edit(**/.netrc)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.aws/**)",
+      "Bash(cat *.env*)",
+      "Bash(cat *credential*)",
+      "Bash(cat *secret*)",
+      "Bash(type *.env*)",
+      "Bash(Get-Content *.env*)"
+    ]
   }
 }
