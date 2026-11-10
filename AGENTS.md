@@ -14,7 +14,7 @@
 
 ### Immutable
 
-- API 키는 클라이언트에 영속화하지 않는다. 입력값은 `App.tsx:14`의 React state에만 두고, localStorage/sessionStorage/쿠키에 저장하지 않는다.
+- 클라이언트 API 키는 localStorage 키 `rcg:apiKey`에만 영속화한다 (`App.tsx`의 `usePersistentState`). sessionStorage·쿠키에는 저장하지 않고, 로그·에러 메시지·URL에 출력하지 않는다. (사용자 결정으로 "영속화 금지"에서 변경됨. XSS 시 키가 노출될 수 있는 위험을 감수한다.)
 - 서버 환경변수 키 값은 클라이언트로 내려보내지 않는다. 클라이언트에는 존재 여부(boolean)만 노출한다 (`server/index.ts:151-152`).
 - `.env`는 커밋하지 않는다 (`.gitignore`).
 
